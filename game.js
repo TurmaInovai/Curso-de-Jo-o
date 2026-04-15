@@ -7,6 +7,11 @@ const gameOverMenu = document.getElementById('game-over');
 const hud = document.getElementById('hud');
 const scoreDisplay = document.getElementById('scoreDisplay');
 const finalScoreDisplay = document.getElementById('finalScoreDisplay');
+const scoresBody = document.getElementById('scoresBody');
+
+// Assets
+const shipImg = new Image();
+shipImg.src = 'ship.png';
 
 // Game Config and State
 let width, height;
@@ -14,6 +19,16 @@ let gameState = 'MENU'; // MENU, PLAYING, GAMEOVER
 let score = 0;
 let frameCount = 0;
 let difficultyMultiplier = 1;
+let baseDifficulty = 1;
+
+// Difficulty Selection
+document.querySelectorAll('.diff-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        baseDifficulty = parseFloat(btn.dataset.diff);
+    });
+});
 
 // Input handling
 const keys = { w: false, a: false, s: false, d: false, ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false };
@@ -61,33 +76,56 @@ class Player {
         this.x = Math.max(this.size, Math.min(width - this.size, this.x));
         this.y = Math.max(this.size, Math.min(height - this.size * 2, this.y));
 
-        // Partículas do motor
-        if ((keys.w || keys.ArrowUp) && Math.random() > 0.3) {
-            particles.push(new Particle(this.x, this.y + this.size, 0, Math.random() * 3 + 2, '#00f3ff', 2));
-        } else if (Math.random() > 0.7 && gameState === 'PLAYING') {
-            particles.push(new Particle(this.x, this.y + this.size, 0, Math.random() * 2 + 1, '#00f3ff', 1.5));
+        // Partículas do motor (Rastros de Fogo)
+        if (gameState === 'PLAYING') {
+            const fireColors = ['#ff4500', '#ff8c00', '#ffd700', '#ff0000'];
+            const color = fireColors[Math.floor(Math.random() * fireColors.length)];
+            
+            // Jato principal quando acelera
+            if (keys.w || keys.ArrowUp || keys.s || keys.ArrowDown || keys.a || keys.ArrowLeft || keys.d || keys.ArrowRight) {
+                for(let i=0; i<2; i++) {
+                    particles.push(new Particle(this.x, this.y + this.size, 0, 2, color, 1.5));
+                }
+            }
+            
+            // Rastro constante
+            if (Math.random() > 0.2) {
+                particles.push(new Particle(this.x, this.y + this.size, 0, 1, color, 1));
+            }
         }
     }
 
     draw() {
         ctx.save();
         ctx.translate(this.x, this.y);
-        ctx.shadowBlur = 20;
-        ctx.shadowColor = this.color;
         
-        // Desenho do triângulo espacial
-        ctx.beginPath();
-        ctx.moveTo(0, -this.size * 1.5);
-        ctx.lineTo(this.size, this.size);
-        ctx.lineTo(0, this.size * 0.5); // parte de trás arqueada (concava)
-        ctx.lineTo(-this.size, this.size);
-        ctx.closePath();
-        
-        ctx.fillStyle = this.color;
-        ctx.fill();
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.stroke();
+        // Rotacionar levemente baseado na velocidade lateral (efeito de inclinação)
+        let tilt = this.vx * 0.05;
+        ctx.rotate(tilt);
+
+        if (shipImg.complete) {
+            // Desenhar imagem da nave realista
+            const ratio = shipImg.width / shipImg.height;
+            const drawW = this.size * 5; 
+            const drawH = drawW / ratio;
+            
+            // Usar blend mode 'screen' para remover o fundo preto da imagem sem criar brilho extra
+            ctx.globalCompositeOperation = 'screen';
+            ctx.drawImage(shipImg, -drawW / 2, -drawH / 2, drawW, drawH);
+            ctx.globalCompositeOperation = 'source-over'; 
+        } else {
+            // Backup caso a imagem demore a carregar
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = this.color;
+            ctx.beginPath();
+            ctx.moveTo(0, -this.size * 1.5);
+            ctx.lineTo(this.size, this.size);
+            ctx.lineTo(0, this.size * 0.5);
+            ctx.lineTo(-this.size, this.size);
+            ctx.closePath();
+            ctx.fillStyle = this.color;
+            ctx.fill();
+        }
         
         ctx.restore();
     }
@@ -128,9 +166,6 @@ class Asteroid {
         ctx.translate(this.x, this.y);
         ctx.rotate(this.rotation);
 
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = this.color;
-
         ctx.beginPath();
         ctx.moveTo(this.vertices[0].x, this.vertices[0].y);
         for (let i = 1; i < this.vertices.length; i++) {
@@ -168,15 +203,12 @@ class Particle {
     draw() {
         ctx.globalAlpha = Math.max(0, this.life);
         ctx.fillStyle = this.color;
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = this.color;
         
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
         ctx.fill();
         
         ctx.globalAlpha = 1.0;
-        ctx.shadowBlur = 0;
     }
 }
 
@@ -230,8 +262,8 @@ function checkCollisions() {
         let dy = a.y - player.y;
         let dist = Math.sqrt(dx*dx + dy*dy);
         
-        // Colisão Baseada em Raio. 0.8 dá uma pequena margem (hitbox mais amigável)
-        if (dist < player.size * 0.7 + a.size * 0.8) {
+        // Colisão Baseada em Raio. Reduzido para limites mais precisos
+        if (dist < player.size * 0.5 + a.size * 0.6) {
             createExplosion(player.x, player.y, player.color);
             createExplosion(a.x, a.y, a.color);
             endGame();
@@ -257,10 +289,10 @@ function loop() {
         frameCount++;
         
         // DIFICULDADE (VELOCIDADE) AUMENTANDO COM O TEMPO!
-        difficultyMultiplier = 1 + (score / 500); // Aumenta ao progredir
+        difficultyMultiplier = baseDifficulty + (score / 500); 
         
         // Spawn de Asteroides fica mais rápido
-        let spawnRate = Math.max(10, 60 - Math.floor(score / 50));
+        let spawnRate = Math.max(8, Math.floor(60 / (baseDifficulty * (1 + score/1000))));
 
         if (frameCount % spawnRate === 0) {
             asteroids.push(new Asteroid());
@@ -308,11 +340,29 @@ function startGame() {
     hud.classList.remove('hidden');
     score = 0;
     frameCount = 0;
-    difficultyMultiplier = 1;
+    difficultyMultiplier = baseDifficulty;
     asteroids = [];
     particles = [];
     scoreDisplay.innerText = score;
     player.reset();
+}
+
+function saveScore(newScore) {
+    let scores = JSON.parse(localStorage.getItem('spaceDodgerScores') || '[]');
+    scores.push(newScore);
+    scores.sort((a, b) => b - a);
+    scores = scores.slice(0, 5); // Top 5
+    localStorage.setItem('spaceDodgerScores', JSON.stringify(scores));
+}
+
+function displayLeaderboard() {
+    const scores = JSON.parse(localStorage.getItem('spaceDodgerScores') || '[]');
+    scoresBody.innerHTML = scores.map((s, i) => `
+        <tr>
+            <td>${i + 1}º</td>
+            <td>${s}</td>
+        </tr>
+    `).join('') || '<tr><td colspan="2">Nenhum recorde ainda</td></tr>';
 }
 
 function endGame() {
@@ -320,6 +370,8 @@ function endGame() {
     hud.classList.add('hidden');
     gameOverMenu.classList.remove('hidden');
     finalScoreDisplay.innerText = score;
+    saveScore(score);
+    displayLeaderboard();
 }
 
 startBtn.addEventListener('click', startGame);
