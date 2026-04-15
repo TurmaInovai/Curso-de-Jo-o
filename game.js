@@ -55,7 +55,7 @@ class Player {
         this.vy = 0;
         this.speed = 0.6;
         this.friction = 0.92;
-        this.size = 18;
+        this.size = 20;
         this.color = '#00f3ff';
     }
 
@@ -339,6 +339,7 @@ function createExplosion(x, y, color) {
 }
 
 function checkCollisions() {
+    // Colisão Player x Meteoro
     for(let i=0; i<asteroids.length; i++) {
         let a = asteroids[i];
         let dx = a.x - player.x;
