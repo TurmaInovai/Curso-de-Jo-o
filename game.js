@@ -216,12 +216,22 @@ class Star {
     constructor() {
         this.x = Math.random() * width;
         this.y = Math.random() * height;
-        this.size = Math.random() * 1.5;
-        this.speed = this.size * 0.5;
+        this.size = Math.random() * 1.8;
+        this.speed = this.size * 0.4;
+        
+        // Cores reais de estrelas
+        const colors = ['#ffffff', '#e6f2ff', '#fffde6', '#ffffff', '#e1e1fb'];
+        this.color = colors[Math.floor(Math.random() * colors.length)];
+        
         this.brightness = Math.random();
+        this.twinkleSpeed = Math.random() * 0.02 + 0.005;
+        this.twinkleDir = Math.random() > 0.5 ? 1 : -1;
     }
     update() {
-        // Background se move mais rapido dependendo do nível de dificuldade
+        // Cintilação
+        this.brightness += this.twinkleSpeed * this.twinkleDir;
+        if (this.brightness > 1 || this.brightness < 0.3) this.twinkleDir *= -1;
+
         this.y += this.speed + (gameState === 'PLAYING' ? difficultyMultiplier * 1.5 : 0.5);
         if (this.y > height) {
             this.y = 0;
@@ -229,10 +239,79 @@ class Star {
         }
     }
     draw() {
-        ctx.fillStyle = `rgba(255, 255, 255, ${this.brightness})`;
+        ctx.fillStyle = this.color;
+        ctx.globalAlpha = this.brightness;
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
         ctx.fill();
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+class SpaceBody {
+    constructor(isPlanet = false) {
+        this.x = Math.random() * width;
+        this.y = Math.random() * height;
+        this.isPlanet = isPlanet;
+        this.size = isPlanet ? Math.random() * 40 + 20 : Math.random() * 5 + 2;
+        this.speed = this.isPlanet ? 0.2 : 0.1; // Bem devagar (Parallax profundo)
+        this.color = isPlanet ? `hsl(${Math.random() * 360}, 30%, 40%)` : '#ffffff';
+        this.opacity = isPlanet ? 0.4 : 0.2;
+    }
+    update() {
+        this.y += this.speed + (gameState === 'PLAYING' ? difficultyMultiplier * 0.2 : 0.1);
+        if (this.y > height + this.size * 2) {
+            this.y = -this.size * 2;
+            this.x = Math.random() * width;
+        }
+    }
+    draw() {
+        ctx.save();
+        ctx.globalAlpha = this.opacity;
+        if (this.isPlanet) {
+            let grad = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size);
+            grad.addColorStop(0, this.color);
+            grad.addColorStop(1, 'transparent');
+            ctx.fillStyle = grad;
+        } else {
+            ctx.fillStyle = this.color;
+        }
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+class Nebula {
+    constructor() {
+        this.x = Math.random() * width;
+        this.y = Math.random() * height;
+        this.size = Math.random() * 400 + 300;
+        const colors = [
+            'rgba(75, 0, 130, 0.05)',  // Indigo
+            'rgba(0, 0, 139, 0.05)',   // DarkBlue
+            'rgba(139, 0, 139, 0.05)', // DarkMagenta
+            'rgba(25, 25, 112, 0.05)'  // MidnightBlue
+        ];
+        this.color = colors[Math.floor(Math.random() * colors.length)];
+        this.speed = 0.05;
+    }
+    update() {
+        this.y += this.speed;
+        if (this.y > height + this.size) {
+            this.y = -this.size;
+            this.x = Math.random() * width;
+        }
+    }
+    draw() {
+        ctx.save();
+        let grad = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size);
+        grad.addColorStop(0, this.color);
+        grad.addColorStop(1, 'transparent');
+        ctx.fillStyle = grad;
+        ctx.fillRect(this.x - this.size, this.y - this.size, this.size * 2, this.size * 2);
+        ctx.restore();
     }
 }
 
@@ -241,11 +320,15 @@ let player;
 let asteroids = [];
 let particles = [];
 let stars = [];
+let nebulae = [];
+let spaceBodies = [];
 
 function init() {
     resize();
     player = new Player();
     for(let i=0; i<150; i++) stars.push(new Star());
+    for(let i=0; i<5; i++) nebulae.push(new Nebula());
+    for(let i=0; i<3; i++) spaceBodies.push(new SpaceBody(true)); // Planetas
     loop();
 }
 
@@ -279,7 +362,17 @@ function loop() {
     ctx.fillStyle = 'rgba(5, 5, 16, 0.5)';
     ctx.fillRect(0, 0, width, height);
 
-    // Draw e Update Stars
+    // Draw e Update Background Layers
+    nebulae.forEach(n => {
+        n.update();
+        n.draw();
+    });
+    
+    spaceBodies.forEach(sb => {
+        sb.update();
+        sb.draw();
+    });
+
     stars.forEach(star => {
         star.update();
         star.draw();
