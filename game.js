@@ -472,6 +472,8 @@ function loop() {
         // Fase de 1250 pontos: Meteoro GIGANTE
         if (score >= 1250 && !hasSpawnedHugeMeteor) {
             hasSpawnedHugeMeteor = true;
+            // Sumir com os asteróides pequenos e medianos
+            asteroids = [];
             asteroids.push(new Asteroid(true));
         }
 
@@ -482,7 +484,11 @@ function loop() {
         let spawnRate = Math.max(8, Math.floor(60 / (baseDifficulty * (1 + score/1000))));
 
         if (frameCount % spawnRate === 0) {
-            asteroids.push(new Asteroid());
+            // Só spawna asteróide se não houver um gigante na tela
+            let isGiantOnScreen = asteroids.some(a => a.isHuge);
+            if (!isGiantOnScreen) {
+                asteroids.push(new Asteroid());
+            }
         }
 
         // Pontuação passiva por desviar/sobreviver
@@ -575,6 +581,24 @@ function endGame() {
     if (typeof updateEngineSound === 'function') updateEngineSound(false);
     gameState = 'GAMEOVER';
     hud.classList.add('hidden');
+    
+    // Mostra o planeta terra sendo atingido
+    gameOverMenu.style.width = '100%';
+    gameOverMenu.style.height = '100%';
+    gameOverMenu.style.borderRadius = '0';
+    gameOverMenu.style.backgroundImage = "url('earth_impact.png')";
+    gameOverMenu.style.backgroundSize = "cover";
+    gameOverMenu.style.backgroundPosition = "center";
+    gameOverMenu.style.border = "none";
+    gameOverMenu.style.display = "flex";
+    gameOverMenu.style.flexDirection = "column";
+    gameOverMenu.style.justifyContent = "center";
+    gameOverMenu.style.alignItems = "center";
+    
+    // Ajusta o fundo para melhorar a leitura do menu
+    gameOverMenu.style.backgroundColor = "rgba(0,0,0,0.6)";
+    gameOverMenu.style.backgroundBlendMode = "darken";
+
     gameOverMenu.classList.remove('hidden');
     finalScoreDisplay.innerText = score;
     saveScore(score);
