@@ -32,7 +32,7 @@ document.querySelectorAll('.diff-btn').forEach(btn => {
 });
 
 // Input handling
-const keys = { w: false, a: false, s: false, d: false, ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false };
+const keys = { w: false, a: false, s: false, d: false, g: false, ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false };
 
 function resize() {
     const container = document.getElementById('game-container');
@@ -58,8 +58,10 @@ class Player {
         this.friction = 0.92;
         this.size = 20;
         this.color = '#00f3ff';
-        this.lives = 3;
+        this.lives = 1;
         this.invincible = 0;
+        this.shootCooldown = 0;
+        this.rewarded = false;
     }
 
     update() {
@@ -80,6 +82,13 @@ class Player {
         this.y = Math.max(this.size, Math.min(height - this.size * 2, this.y));
 
         if (this.invincible > 0) this.invincible--;
+        if (this.shootCooldown > 0) this.shootCooldown--;
+
+        // Atirar com G
+        if (keys.g && this.shootCooldown <= 0) {
+            playerLasers.push(new PlayerLaser(this.x, this.y - this.size));
+            this.shootCooldown = 15; // Intervalo entre tiros
+        }
 
         // Partículas do motor (Rastros de Fogo)
         if (gameState === 'PLAYING') {
@@ -119,14 +128,10 @@ class Player {
             const drawW = this.size * 5; 
             const drawH = drawW / ratio;
             
-            // Usar blend mode 'screen' para remover o fundo preto da imagem sem criar brilho extra
-            ctx.globalCompositeOperation = 'screen';
+            // Desenhar imagem da nave
             ctx.drawImage(shipImg, -drawW / 2, -drawH / 2, drawW, drawH);
-            ctx.globalCompositeOperation = 'source-over'; 
         } else {
             // Backup caso a imagem demore a carregar
-            ctx.shadowBlur = 20;
-            ctx.shadowColor = this.color;
             ctx.beginPath();
             ctx.moveTo(0, -this.size * 1.5);
             ctx.lineTo(this.size, this.size);
@@ -335,6 +340,8 @@ class Boss {
         this.speedX = 3;
         this.shootTimer = 0;
         this.color = '#ff004c';
+        this.hp = 50;
+        this.maxHp = 50;
     }
 
     update() {
@@ -366,8 +373,8 @@ class Boss {
         ctx.shadowBlur = 30;
         ctx.shadowColor = this.color;
         
-        // Corpo do Boss
-        ctx.fillStyle = '#1a1a1a';
+        // Corpo do Boss (mais tecnológico e sem "quadrado preto")
+        ctx.fillStyle = 'rgba(30, 0, 50, 0.8)'; 
         ctx.strokeStyle = this.color;
         ctx.lineWidth = 4;
         
@@ -381,16 +388,54 @@ class Boss {
         ctx.fill();
         ctx.stroke();
 
-        // Olhos/Luzes do Boss
+        // Olhos/Luzes do Boss (formato mais agressivo)
         ctx.fillStyle = this.color;
         ctx.beginPath();
-        ctx.arc(this.x + this.width * 0.3, this.y + this.height * 0.4, 8, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(this.x + this.width * 0.7, this.y + this.height * 0.4, 8, 0, Math.PI * 2);
+        ctx.moveTo(this.x + this.width * 0.25, this.y + this.height * 0.3);
+        ctx.lineTo(this.x + this.width * 0.4, this.y + this.height * 0.45);
+        ctx.lineTo(this.x + this.width * 0.25, this.y + this.height * 0.45);
+        ctx.closePath();
         ctx.fill();
 
+        ctx.beginPath();
+        ctx.moveTo(this.x + this.width * 0.75, this.y + this.height * 0.3);
+        ctx.lineTo(this.x + this.width * 0.6, this.y + this.height * 0.45);
+        ctx.lineTo(this.x + this.width * 0.75, this.y + this.height * 0.45);
+        ctx.closePath();
+        ctx.fill();
+
+        // Sorriso maligno
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(this.x + this.width / 2, this.y + this.height * 0.4, 30, 0.2 * Math.PI, 0.8 * Math.PI);
+        ctx.stroke();
+
+        // Barra de Vida do Boss
+        this.drawHealthBar();
+
         ctx.restore();
+    }
+
+    drawHealthBar() {
+        const barW = 150;
+        const barH = 10;
+        const x = this.x + (this.width - barW) / 2;
+        const y = this.y - 15;
+
+        // Fundo da barra
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(x, y, barW, barH);
+
+        // Vida atual
+        const hpPercent = Math.max(0, this.hp / this.maxHp);
+        ctx.fillStyle = this.color;
+        ctx.fillRect(x, y, barW * hpPercent, barH);
+
+        // Borda
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x, y, barW, barH);
     }
 }
 
@@ -430,6 +475,70 @@ let nebulae = [];
 let spaceBodies = [];
 let boss = null;
 let lasers = [];
+let playerLasers = [];
+let visualExplosions = [];
+let screenShake = 0;
+
+class ExplosionAnim {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.life = 1.0;
+        this.rings = [
+            {size: 10, speed: 4, color: '#ffffff'},
+            {size: 5, speed: 2, color: '#ffb700'},
+            {size: 2, speed: 1, color: '#ff4500'}
+        ];
+    }
+    update() {
+        this.life -= 0.02;
+        this.rings.forEach(r => r.size += r.speed);
+    }
+    draw() {
+        ctx.save();
+        this.rings.forEach(r => {
+            ctx.globalAlpha = this.life;
+            ctx.strokeStyle = r.color;
+            ctx.lineWidth = 5 * this.life;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, r.size, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Brilho central
+            let grad = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, r.size * 0.8);
+            grad.addColorStop(0, r.color);
+            grad.addColorStop(1, 'transparent');
+            ctx.fillStyle = grad;
+            ctx.globalAlpha = this.life * 0.3;
+            ctx.fill();
+        });
+        ctx.restore();
+    }
+}
+
+class PlayerLaser {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.width = 4;
+        this.height = 20;
+        this.speedY = -12;
+        this.hue = Math.random() * 360;
+    }
+    update() {
+        this.y += this.speedY;
+        this.hue = (this.hue + 10) % 360;
+    }
+    draw() {
+        ctx.save();
+        const color = `hsl(${this.hue}, 100%, 50%)`;
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = color;
+        ctx.fillStyle = color;
+        ctx.fillRect(this.x - this.width/2, this.y, this.width, this.height);
+        ctx.restore();
+    }
+}
 
 function init() {
     resize();
@@ -481,10 +590,14 @@ function takeDamage(x, y, color) {
     player.lives--;
     player.invincible = 120; // ~2 segundos a 60fps
     createExplosion(x, y, color);
+    visualExplosions.push(new ExplosionAnim(x, y));
+    screenShake = 15;
     updateLivesDisplay();
     
     if (player.lives <= 0) {
+        visualExplosions.push(new ExplosionAnim(player.x, player.y));
         createExplosion(player.x, player.y, player.color);
+        screenShake = 30;
         endGame();
     }
 }
@@ -499,6 +612,15 @@ function loop() {
     // Clear canvas com pequeno "rastro" para dar sensação de velocidade
     ctx.fillStyle = 'rgba(5, 5, 16, 0.5)';
     ctx.fillRect(0, 0, width, height);
+
+    ctx.save();
+    if (screenShake > 0) {
+        const sx = (Math.random() - 0.5) * screenShake;
+        const sy = (Math.random() - 0.5) * screenShake;
+        ctx.translate(sx, sy);
+        screenShake *= 0.9;
+        if (screenShake < 0.1) screenShake = 0;
+    }
 
     // Draw e Update Background Layers
     nebulae.forEach(n => {
@@ -586,7 +708,74 @@ function loop() {
         }
 
         checkCollisions();
+
+        // Lógica de Lasers do Player
+        for (let i = playerLasers.length - 1; i >= 0; i--) {
+            let pl = playerLasers[i];
+            pl.update();
+            pl.draw();
+            
+            // Colisão laser x asteroide
+            for (let j = asteroids.length - 1; j >= 0; j--) {
+                let a = asteroids[j];
+                let dx = pl.x - a.x;
+                let dy = pl.y - a.y;
+                let dist = Math.sqrt(dx*dx + dy*dy);
+                
+                if (dist < a.size + pl.width) {
+                    createExplosion(a.x, a.y, a.color);
+                    visualExplosions.push(new ExplosionAnim(a.x, a.y));
+                    asteroids.splice(j, 1);
+                    playerLasers.splice(i, 1);
+                    score += 20; // Pontos por destruir
+                    scoreDisplay.innerText = score;
+                    break;
+                }
+
+                // Colisão laser x Boss
+                if (boss) {
+                    if (pl.x > boss.x && pl.x < boss.x + boss.width &&
+                        pl.y > boss.y && pl.y < boss.y + boss.height) {
+                        
+                        boss.hp -= 2;
+                        visualExplosions.push(new ExplosionAnim(pl.x, pl.y));
+                        playerLasers.splice(i, 1);
+                        
+                        if (boss.hp <= 0) {
+                            visualExplosions.push(new ExplosionAnim(boss.x + boss.width/2, boss.y + boss.height/2));
+                            boss = null;
+                            score += 500; // Bônus por derrotar o boss
+                            scoreDisplay.innerText = score;
+                            lasers = [];
+                        }
+                        break;
+                    }
+                }
+            }
+
+            if (pl && pl.y < -20) playerLasers.splice(i, 1);
+        }
+
+        // Update Visual Explosions
+        for (let i = visualExplosions.length - 1; i >= 0; i--) {
+            let ve = visualExplosions[i];
+            ve.update();
+            ve.draw();
+            if (ve.life <= 0) visualExplosions.splice(i, 1);
+        }
+
+        // Recompensa de 1000 pontos
+        if (score >= 1000 && !player.rewarded) {
+            player.lives++;
+            player.rewarded = true;
+            updateLivesDisplay();
+            // Efeito visual de bônus
+            visualExplosions.push(new ExplosionAnim(width/2, height/2));
+            createExplosion(width/2, height/2, '#ff0000');
+        }
     }
+    
+    ctx.restore();
 
     // Update Particles
     for (let i = particles.length - 1; i >= 0; i--) {
@@ -608,6 +797,8 @@ function startGame() {
     asteroids = [];
     particles = [];
     lasers = [];
+    playerLasers = [];
+    visualExplosions = [];
     boss = null;
     scoreDisplay.innerText = score;
     player.reset();
