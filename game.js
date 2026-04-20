@@ -8,6 +8,7 @@ const hud = document.getElementById('hud');
 const scoreDisplay = document.getElementById('scoreDisplay');
 const finalScoreDisplay = document.getElementById('finalScoreDisplay');
 const scoresBody = document.getElementById('scoresBody');
+const livesDisplay = document.getElementById('lives-display');
 
 // Assets
 const shipImg = new Image();
@@ -57,6 +58,8 @@ class Player {
         this.friction = 0.92;
         this.size = 20;
         this.color = '#00f3ff';
+        this.lives = 3;
+        this.invincible = 0;
     }
 
     update() {
@@ -75,6 +78,8 @@ class Player {
         // Limites da tela
         this.x = Math.max(this.size, Math.min(width - this.size, this.x));
         this.y = Math.max(this.size, Math.min(height - this.size * 2, this.y));
+
+        if (this.invincible > 0) this.invincible--;
 
         // Partículas do motor (Rastros de Fogo)
         if (gameState === 'PLAYING') {
@@ -102,6 +107,11 @@ class Player {
         // Rotacionar levemente baseado na velocidade lateral (efeito de inclinação)
         let tilt = this.vx * 0.05;
         ctx.rotate(tilt);
+
+        // Efeito de piscar quando invicível
+        if (this.invincible > 0 && Math.floor(frameCount / 5) % 2 === 0) {
+            ctx.globalAlpha = 0.3;
+        }
 
         if (shipImg.complete) {
             // Desenhar imagem da nave realista
@@ -315,6 +325,102 @@ class Nebula {
     }
 }
 
+class Boss {
+    constructor() {
+        this.width = 180;
+        this.height = 100;
+        this.x = width / 2 - this.width / 2;
+        this.y = -this.height - 50; 
+        this.targetY = 60;
+        this.speedX = 3;
+        this.shootTimer = 0;
+        this.color = '#ff004c';
+    }
+
+    update() {
+        // Entrada suave
+        if (this.y < this.targetY) {
+            this.y += 2;
+        }
+
+        // Movimento lateral
+        this.x += this.speedX;
+        if (this.x <= 0 || this.x + this.width >= width) {
+            this.speedX *= -1;
+        }
+
+        // Atirar tiros laser
+        this.shootTimer++;
+        if (this.shootTimer > 40) { // Frequência do tiro
+            this.shoot();
+            this.shootTimer = 0;
+        }
+    }
+
+    shoot() {
+        lasers.push(new Laser(this.x + this.width / 2, this.y + this.height));
+    }
+
+    draw() {
+        ctx.save();
+        ctx.shadowBlur = 30;
+        ctx.shadowColor = this.color;
+        
+        // Corpo do Boss
+        ctx.fillStyle = '#1a1a1a';
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 4;
+        
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y);
+        ctx.lineTo(this.x + this.width, this.y);
+        ctx.lineTo(this.x + this.width * 0.9, this.y + this.height * 0.7);
+        ctx.lineTo(this.x + this.width * 0.5, this.y + this.height);
+        ctx.lineTo(this.x + this.width * 0.1, this.y + this.height * 0.7);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Olhos/Luzes do Boss
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x + this.width * 0.3, this.y + this.height * 0.4, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(this.x + this.width * 0.7, this.y + this.height * 0.4, 8, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+    }
+}
+
+class Laser {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.width = 6;
+        this.height = 40;
+        this.speedY = 10;
+        this.color = '#00ff44'; // Laser venenoso/alienígena
+    }
+
+    update() {
+        this.y += this.speedY;
+    }
+
+    draw() {
+        ctx.save();
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = this.color;
+        ctx.fillStyle = this.color;
+        
+        ctx.beginPath();
+        ctx.roundRect(this.x - this.width / 2, this.y, this.width, this.height, 5);
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
 // Global Variables
 let player;
 let asteroids = [];
@@ -322,6 +428,8 @@ let particles = [];
 let stars = [];
 let nebulae = [];
 let spaceBodies = [];
+let boss = null;
+let lasers = [];
 
 function init() {
     resize();
@@ -339,6 +447,8 @@ function createExplosion(x, y, color) {
 }
 
 function checkCollisions() {
+    if (player.invincible > 0) return;
+
     // Colisão Player x Meteoro
     for(let i=0; i<asteroids.length; i++) {
         let a = asteroids[i];
@@ -346,14 +456,41 @@ function checkCollisions() {
         let dy = a.y - player.y;
         let dist = Math.sqrt(dx*dx + dy*dy);
         
-        // Colisão Baseada em Raio. Reduzido para limites mais precisos
+        // Colisão Baseada em Raio
         if (dist < player.size * 0.5 + a.size * 0.6) {
-            createExplosion(player.x, player.y, player.color);
-            createExplosion(a.x, a.y, a.color);
-            endGame();
-            break;
+            takeDamage(a.x, a.y, a.color);
+            return;
         }
     }
+
+    // Colisão Player x Lasers do Boss
+    for(let i=0; i<lasers.length; i++) {
+        let l = lasers[i];
+        if (player.x + player.size > l.x - l.width/2 && 
+            player.x - player.size < l.x + l.width/2 &&
+            player.y + player.size > l.y && 
+            player.y - player.size < l.y + l.height) {
+            takeDamage(l.x, l.y, l.color);
+            lasers.splice(i, 1); // Remove o laser que atingiu
+            return;
+        }
+    }
+}
+
+function takeDamage(x, y, color) {
+    player.lives--;
+    player.invincible = 120; // ~2 segundos a 60fps
+    createExplosion(x, y, color);
+    updateLivesDisplay();
+    
+    if (player.lives <= 0) {
+        createExplosion(player.x, player.y, player.color);
+        endGame();
+    }
+}
+
+function updateLivesDisplay() {
+    livesDisplay.innerText = '❤️'.repeat(Math.max(0, player.lives));
 }
 
 function loop() {
@@ -385,11 +522,44 @@ function loop() {
         // DIFICULDADE (VELOCIDADE) AUMENTANDO COM O TEMPO!
         difficultyMultiplier = baseDifficulty + (score / 500); 
         
-        // Spawn de Asteroides fica mais rápido
-        let spawnRate = Math.max(8, Math.floor(60 / (baseDifficulty * (1 + score/1000))));
+        // Aviso de Chefão
+        if (score >= 950 && score < 1000) {
+            ctx.fillStyle = 'rgba(255, 0, 0, ' + (Math.sin(frameCount / 10) * 0.5 + 0.5) + ')';
+            ctx.font = 'bold 30px Orbitron';
+            ctx.textAlign = 'center';
+            ctx.fillText('AVISO: CHEFÃO SE APROXIMANDO!', width / 2, height / 2);
+        }
 
-        if (frameCount % spawnRate === 0) {
-            asteroids.push(new Asteroid());
+        // Lógica do Boss (1000 a 1500 pontos)
+        if (score >= 1000 && score < 1500) {
+            if (!boss) boss = new Boss();
+            boss.update();
+            boss.draw();
+
+            // Spawn de asteroides reduzido durante o boss
+            if (frameCount % 60 === 0) {
+                asteroids.push(new Asteroid());
+            }
+        } else {
+            // Se passou de 1500 ou morreu, remove boss e limpa lasers
+            if (boss) {
+                boss = null;
+                lasers = [];
+            }
+            
+            // Spawn normal de Asteroides
+            let spawnRate = Math.max(8, Math.floor(60 / (baseDifficulty * (1 + score/1000))));
+            if (frameCount % spawnRate === 0) {
+                asteroids.push(new Asteroid());
+            }
+        }
+
+        // Update Lasers
+        for (let i = lasers.length - 1; i >= 0; i--) {
+            let l = lasers[i];
+            l.update();
+            l.draw();
+            if (l.y > height) lasers.splice(i, 1);
         }
 
         // Pontuação passiva por desviar/sobreviver
@@ -437,8 +607,11 @@ function startGame() {
     difficultyMultiplier = baseDifficulty;
     asteroids = [];
     particles = [];
+    lasers = [];
+    boss = null;
     scoreDisplay.innerText = score;
     player.reset();
+    updateLivesDisplay();
 }
 
 function saveScore(newScore) {
