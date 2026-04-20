@@ -82,11 +82,15 @@ class Player {
             const color = fireColors[Math.floor(Math.random() * fireColors.length)];
             
             // Jato principal quando acelera
+            let isMoving = false;
             if (keys.w || keys.ArrowUp || keys.s || keys.ArrowDown || keys.a || keys.ArrowLeft || keys.d || keys.ArrowRight) {
+                isMoving = true;
                 for(let i=0; i<2; i++) {
                     particles.push(new Particle(this.x, this.y + this.size, 0, 2, color, 1.5));
                 }
             }
+
+            if (typeof updateEngineSound === 'function') updateEngineSound(isMoving);
             
             // Rastro constante
             if (Math.random() > 0.2) {
@@ -323,6 +327,63 @@ let stars = [];
 let nebulae = [];
 let spaceBodies = [];
 
+// Audio Variables
+let audioCtx;
+let engineGain;
+let engineFilter;
+let noiseSource;
+
+function initAudio() {
+    if (audioCtx) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const bufferSize = audioCtx.sampleRate * 2;
+    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    let lastOut = 0;
+    for (let i = 0; i < bufferSize; i++) {
+        let white = Math.random() * 2 - 1;
+        data[i] = (lastOut + (0.02 * white)) / 1.02;
+        lastOut = data[i];
+        data[i] *= 3.5; // Compensate for gain loss
+    }
+
+    noiseSource = audioCtx.createBufferSource();
+    noiseSource.buffer = buffer;
+    noiseSource.loop = true;
+
+    engineFilter = audioCtx.createBiquadFilter();
+    engineFilter.type = 'lowpass';
+    engineFilter.frequency.value = 200;
+
+    engineGain = audioCtx.createGain();
+    engineGain.gain.value = 0;
+
+    noiseSource.connect(engineFilter);
+    engineFilter.connect(engineGain);
+    engineGain.connect(audioCtx.destination);
+
+    noiseSource.start();
+}
+
+function updateEngineSound(isMoving) {
+    if (!engineGain || !audioCtx) return;
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+    
+    const now = audioCtx.currentTime;
+    engineGain.gain.cancelScheduledValues(now);
+    engineFilter.frequency.cancelScheduledValues(now);
+
+    if (isMoving) {
+        engineGain.gain.setTargetAtTime(0.5, now, 0.1);
+        engineFilter.frequency.setTargetAtTime(800, now, 0.1);
+    } else {
+        engineGain.gain.setTargetAtTime(0.0, now, 0.2);
+        engineFilter.frequency.setTargetAtTime(200, now, 0.2);
+    }
+}
+
 function init() {
     resize();
     player = new Player();
@@ -428,6 +489,7 @@ function loop() {
 }
 
 function startGame() {
+    initAudio();
     gameState = 'PLAYING';
     mainMenu.classList.add('hidden');
     gameOverMenu.classList.add('hidden');
@@ -460,6 +522,7 @@ function displayLeaderboard() {
 }
 
 function endGame() {
+    if (typeof updateEngineSound === 'function') updateEngineSound(false);
     gameState = 'GAMEOVER';
     hud.classList.add('hidden');
     gameOverMenu.classList.remove('hidden');
