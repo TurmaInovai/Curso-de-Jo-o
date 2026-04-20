@@ -33,7 +33,7 @@ document.querySelectorAll('.diff-btn').forEach(btn => {
 });
 
 // Input handling
-const keys = { w: false, a: false, s: false, d: false, ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false };
+const keys = { w: false, a: false, s: false, d: false, ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false, ' ': false };
 
 function resize() {
     const container = document.getElementById('game-container');
@@ -41,7 +41,12 @@ function resize() {
     height = canvas.height = container.clientHeight;
 }
 window.addEventListener('resize', resize);
-window.addEventListener('keydown', e => { if (keys.hasOwnProperty(e.key)) keys[e.key] = true; });
+window.addEventListener('keydown', e => { 
+    if (keys.hasOwnProperty(e.key)) {
+        keys[e.key] = true; 
+        if (e.key === ' ' || e.key.startsWith('Arrow')) e.preventDefault();
+    }
+});
 window.addEventListener('keyup', e => { if (keys.hasOwnProperty(e.key)) keys[e.key] = false; });
 
 // Classes
@@ -59,9 +64,21 @@ class Player {
         this.friction = 0.92;
         this.size = 20;
         this.color = '#00f3ff';
+        this.cooldown = 0;
+    }
+
+    shoot() {
+        bullets.push(new Bullet(this.x, this.y - this.size));
+        this.cooldown = 15;
+        if (typeof playLaserSound === 'function') playLaserSound();
     }
 
     update() {
+        if (keys[' '] && this.cooldown <= 0) {
+            this.shoot();
+        }
+        if (this.cooldown > 0) this.cooldown--;
+        
         // Acelerar com as teclas WASD/Setas
         if (keys.w || keys.ArrowUp) this.vy -= this.speed;
         if (keys.s || keys.ArrowDown) this.vy += this.speed;
@@ -345,9 +362,32 @@ let particles = [];
 let stars = [];
 let nebulae = [];
 let spaceBodies = [];
+let bullets = [];
 let hasShownWarning = false;
 let warningTimer = 0;
 let hasSpawnedHugeMeteor = false;
+
+class Bullet {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.speedY = -12;
+        this.radius = 4;
+        this.color = '#00f3ff';
+        this.markedForDeletion = false;
+    }
+    update() {
+        this.y += this.speedY;
+        if (this.y < -10) this.markedForDeletion = true;
+        particles.push(new Particle(this.x, this.y + this.radius, 0, 1, this.color, 0.5));
+    }
+    draw() {
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
 
 // Audio Variables
 let audioCtx;
@@ -387,6 +427,27 @@ function initAudio() {
     noiseSource.start();
 }
 
+function playLaserSound() {
+    if (!audioCtx) return;
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(300, audioCtx.currentTime + 0.1);
+    
+    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+    
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.1);
+}
+
 function updateEngineSound(isMoving) {
     if (!engineGain || !audioCtx) return;
     if (audioCtx.state === 'suspended') {
@@ -422,6 +483,35 @@ function createExplosion(x, y, color) {
 }
 
 function checkCollisions() {
+    // Colisão Bala x Meteoro
+    for (let i = bullets.length - 1; i >= 0; i--) {
+        let b = bullets[i];
+        let hit = false;
+        
+        for (let j = asteroids.length - 1; j >= 0; j--) {
+            let a = asteroids[j];
+            let dx = a.x - b.x;
+            let dy = a.y - b.y;
+            let dist = Math.sqrt(dx*dx + dy*dy);
+            
+            if (dist < a.size * 0.8 + b.radius) {
+                if (a.size <= 28) {
+                    createExplosion(a.x, a.y, a.color);
+                    asteroids.splice(j, 1);
+                    score += doubleSpeedActived ? 20 : 10;
+                    scoreDisplay.innerText = score;
+                } else {
+                    // Small explosion for deflected bullet
+                    for(let k=0; k<10; k++) particles.push(new Particle(b.x, b.y, 0, 0, b.color, 0.8));
+                }
+                b.markedForDeletion = true;
+                hit = true;
+                break;
+            }
+        }
+        if (hit) bullets.splice(i, 1);
+    }
+
     // Colisão Player x Meteoro
     for(let i=0; i<asteroids.length; i++) {
         let a = asteroids[i];
@@ -518,6 +608,14 @@ function loop() {
         }
 
         checkCollisions();
+
+        // Update Bullets
+        for (let i = bullets.length - 1; i >= 0; i--) {
+            let b = bullets[i];
+            b.update();
+            b.draw();
+            if (b.markedForDeletion) bullets.splice(i, 1);
+        }
         
         // Renderizar Alerta
         if (warningTimer > 0) {
@@ -560,6 +658,7 @@ function startGame() {
     difficultyMultiplier = baseDifficulty * (doubleSpeedActived ? 2 : 1);
     asteroids = [];
     particles = [];
+    bullets = [];
     hasShownWarning = false;
     warningTimer = 0;
     hasSpawnedHugeMeteor = false;
