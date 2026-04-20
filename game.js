@@ -136,25 +136,42 @@ class Player {
 }
 
 class Asteroid {
-    constructor() {
-        this.size = Math.random() * 25 + 15;
-        this.x = Math.random() * (width - this.size * 2) + this.size;
-        this.y = -this.size - 20;
+    constructor(isHuge = false) {
+        this.isHuge = isHuge;
+        let baseSize = isHuge ? width * 0.42 : Math.random() * 25 + 15;
         
-        // MULTIPLICADOR DE DIFICULDADE (VELOCIDADE)
-        this.speedY = (Math.random() * 2 + 3) * difficultyMultiplier; 
-        this.speedX = (Math.random() - 0.5) * difficultyMultiplier;
+        // Aumenta o tamanho depois de 750 pontos para novos meteoros
+        if (!isHuge && score >= 750) {
+            baseSize *= 1.8;
+        }
+        
+        this.size = baseSize;
+        
+        if (isHuge) {
+            // Fica no centro, forçando ir para o cantinho do mapa
+            this.x = width / 2;
+            this.y = -this.size - 50;
+            this.speedY = 2.5; 
+            this.speedX = 0;
+            this.color = '#ffaa00'; // Dourado forte/Laranja
+        } else {
+            this.x = Math.random() * (width - this.size * 2) + this.size;
+            this.y = -this.size - 20;
+            this.speedY = (Math.random() * 2 + 3) * difficultyMultiplier; 
+            this.speedX = (Math.random() - 0.5) * difficultyMultiplier;
+            this.color = Math.random() > 0.5 ? '#ff003c' : '#bc13fe';
+        }
         
         this.rotation = 0;
         this.rotationSpeed = (Math.random() - 0.5) * 0.1;
-        this.color = Math.random() > 0.5 ? '#ff003c' : '#bc13fe';
         
         // Gerar formato irregular (asteroide)
         this.vertices = [];
         const verticesNum = Math.floor(Math.random() * 4 + 6);
         for(let i=0; i<verticesNum; i++) {
             const angle = (i / verticesNum) * Math.PI * 2;
-            const radius = this.size * (0.7 + Math.random() * 0.3); // Variar o raio para deixar menos redondo
+            // Meteoro gigante fica mais redondo pra hitbox melhor
+            const radius = this.size * (isHuge ? (0.9 + Math.random() * 0.1) : (0.7 + Math.random() * 0.3));
             this.vertices.push({x: Math.cos(angle) * radius, y: Math.sin(angle) * radius});
         }
     }
@@ -326,6 +343,9 @@ let particles = [];
 let stars = [];
 let nebulae = [];
 let spaceBodies = [];
+let hasShownWarning = false;
+let warningTimer = 0;
+let hasSpawnedHugeMeteor = false;
 
 // Audio Variables
 let audioCtx;
@@ -443,6 +463,18 @@ function loop() {
     if (gameState === 'PLAYING') {
         frameCount++;
         
+        // Fase de 750 pontos: Alerta na tela e aumenta os meteoros
+        if (score >= 750 && !hasShownWarning) {
+            hasShownWarning = true;
+            warningTimer = 180; // pisca por 3 segundos
+        }
+
+        // Fase de 1250 pontos: Meteoro GIGANTE
+        if (score >= 1250 && !hasSpawnedHugeMeteor) {
+            hasSpawnedHugeMeteor = true;
+            asteroids.push(new Asteroid(true));
+        }
+
         // DIFICULDADE (VELOCIDADE) AUMENTANDO COM O TEMPO!
         difficultyMultiplier = baseDifficulty + (score / 500); 
         
@@ -477,6 +509,21 @@ function loop() {
         }
 
         checkCollisions();
+        
+        // Renderizar Alerta
+        if (warningTimer > 0) {
+            warningTimer--;
+            if (Math.floor(warningTimer / 15) % 2 === 0) {
+                ctx.save();
+                ctx.fillStyle = '#ff003c';
+                ctx.font = 'bold 30px Orbitron';
+                ctx.textAlign = 'center';
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = '#ff003c';
+                ctx.fillText("ALERTA: METEOROS MAIORES!", width / 2, height / 2.5);
+                ctx.restore();
+            }
+        }
     }
 
     // Update Particles
@@ -499,6 +546,9 @@ function startGame() {
     difficultyMultiplier = baseDifficulty;
     asteroids = [];
     particles = [];
+    hasShownWarning = false;
+    warningTimer = 0;
+    hasSpawnedHugeMeteor = false;
     scoreDisplay.innerText = score;
     player.reset();
 }
