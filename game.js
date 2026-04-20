@@ -8,6 +8,7 @@ const hud = document.getElementById('hud');
 const scoreDisplay = document.getElementById('scoreDisplay');
 const finalScoreDisplay = document.getElementById('finalScoreDisplay');
 const scoresBody = document.getElementById('scoresBody');
+const doubleSpeedCheck = document.getElementById('doubleSpeedCheck');
 
 // Assets
 const shipImg = new Image();
@@ -20,6 +21,7 @@ let score = 0;
 let frameCount = 0;
 let difficultyMultiplier = 1;
 let baseDifficulty = 1;
+let doubleSpeedActived = false;
 
 // Difficulty Selection
 document.querySelectorAll('.diff-btn').forEach(btn => {
@@ -478,10 +480,11 @@ function loop() {
         }
 
         // DIFICULDADE (VELOCIDADE) AUMENTANDO COM O TEMPO!
-        difficultyMultiplier = baseDifficulty + (score / 500); 
+        difficultyMultiplier = (baseDifficulty + (score / 500)) * (doubleSpeedActived ? 2 : 1); 
         
         // Spawn de Asteroides fica mais rápido
-        let spawnRate = Math.max(8, Math.floor(60 / (baseDifficulty * (1 + score/1000))));
+        let effectiveBaseDiff = doubleSpeedActived ? baseDifficulty * 2 : baseDifficulty;
+        let spawnRate = Math.max(8, Math.floor(60 / (effectiveBaseDiff * (1 + score/1000))));
 
         if (frameCount % spawnRate === 0) {
             // Só spawna asteróide se não houver um gigante na tela
@@ -493,7 +496,7 @@ function loop() {
 
         // Pontuação passiva por desviar/sobreviver
         if (frameCount % 60 === 0) {
-            score += 10;
+            score += doubleSpeedActived ? 20 : 10;
             scoreDisplay.innerText = score;
         }
 
@@ -509,7 +512,7 @@ function loop() {
             // Destroi asteroides fora da tela para poupar memória e dá ponto bônus
             if (a.y > height + a.size) {
                 asteroids.splice(i, 1);
-                score += 5; // Ponto bônus por passar
+                score += doubleSpeedActived ? 10 : 5; // Ponto bônus por passar
                 scoreDisplay.innerText = score;
             }
         }
@@ -522,11 +525,15 @@ function loop() {
             if (Math.floor(warningTimer / 15) % 2 === 0) {
                 ctx.save();
                 ctx.fillStyle = '#ff003c';
-                ctx.font = 'bold 30px Orbitron';
                 ctx.textAlign = 'center';
                 ctx.shadowBlur = 15;
                 ctx.shadowColor = '#ff003c';
-                ctx.fillText("ALERTA: METEOROS MAIORES!", width / 2, height / 2.5);
+                // Desenha os emojis
+                ctx.font = '60px Arial';
+                ctx.fillText("⚠️ ⚠️ ⚠️", width / 2, height / 2.5 - 40);
+                // Desenha o texto
+                ctx.font = 'bold 30px Orbitron';
+                ctx.fillText("ALERTA: METEOROS MAIORES!", width / 2, height / 2.5 + 10);
                 ctx.restore();
             }
         }
@@ -549,7 +556,8 @@ function startGame() {
     hud.classList.remove('hidden');
     score = 0;
     frameCount = 0;
-    difficultyMultiplier = baseDifficulty;
+    doubleSpeedActived = doubleSpeedCheck && doubleSpeedCheck.checked;
+    difficultyMultiplier = baseDifficulty * (doubleSpeedActived ? 2 : 1);
     asteroids = [];
     particles = [];
     hasShownWarning = false;
