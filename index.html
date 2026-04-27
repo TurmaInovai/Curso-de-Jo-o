@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,22 +8,24 @@
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
 </head>
+
 <body>
     <div id="game-container">
         <canvas id="gameCanvas"></canvas>
-        
+
         <div id="ui-layer">
             <div id="hud" class="hidden">
                 <div class="hud-content">
-                    <div class="score-board">Pontos: <span id="scoreDisplay">0</span></div>
-                    <div id="lives-display">❤️❤️❤️</div>
+                    <div class="score-board">score: <span id="scoreDisplay">0</span></div>
+                    <div id="lives-display">❤️</div>
                 </div>
             </div>
 
             <div id="main-menu" class="menu-panel">
-                <h1 class="glitch" data-text="BEWARE THE METEOR">BEWARE THE METEOR</h1>
-                <p>Use [W][A][S][D] ou [Setas] para mover.<br>Pressione [G] para atirar laser!<br>Cuidado com os meteoros!</p>
-                
+                <h1 class="glitch" data-text="BEWARE THE METEOR">cuidado ó a pedra</h1>
+                <p>Use [W][A][S][D] ou [Setas] para mover.<br>Pressione [G] para atirar laser!<br>Cuidado com os
+                    meteoros!</p>
+
                 <div class="difficulty-selector">
                     <button class="diff-btn active" data-diff="1">FÁCIL</button>
                     <button class="diff-btn" data-diff="1.5">MÉDIO</button>
@@ -35,7 +38,7 @@
             <div id="game-over" class="menu-panel hidden">
                 <h2 class="neon-text-red">FIM DE JOGO</h2>
                 <div class="final-score">Sua Nave Bateu! Pontuação: <span id="finalScoreDisplay">0</span></div>
-                
+
                 <div id="leaderboard">
                     <h3>🏆 TOP RECORDES</h3>
                     <table id="scoresTable">
@@ -57,4 +60,5 @@
     </div>
     <script src="game.js"></script>
 </body>
+
 </html>
